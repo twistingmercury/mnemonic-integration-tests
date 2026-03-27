@@ -81,9 +81,21 @@ func TestUpdatePattern_Returns200(t *testing.T) {
 	if err != nil {
 		t.Fatalf("PUT /v1/api/patterns/%s: %v", created.ID, err)
 	}
+	defer resp.Body.Close()
 
-	helpers.AssertStatusCode(t, resp, http.StatusOK)
-	updated := helpers.ParseJSON[helpers.Pattern](t, resp)
+	// API returns 204 No Content on successful update.
+	if resp.StatusCode != http.StatusNoContent && resp.StatusCode != http.StatusOK {
+		body := helpers.ReadBody(t, resp)
+		t.Fatalf("expected 204 or 200, got %d\nBody: %s", resp.StatusCode, string(body))
+	}
+
+	// Verify by fetching the updated pattern.
+	getResp, err := client.Get("/v1/api/patterns/" + created.ID)
+	if err != nil {
+		t.Fatalf("GET after PUT: %v", err)
+	}
+	helpers.AssertStatusCode(t, getResp, http.StatusOK)
+	updated := helpers.ParseJSON[helpers.Pattern](t, getResp)
 
 	if updated.Content != "# Updated\n\nUpdated content." {
 		t.Errorf("content not updated: got %q", updated.Content)
