@@ -46,7 +46,7 @@ services:
       - mnemonic-network
 
   mnemonic_api:
-    image: ghcr.io/twistingmercury/mnemonic-api:latest
+    image: ghcr.io/twistingmercury/mnemonic-api:latest-dev
     environment:
       MNEMONIC_DATABASE_POSTGRES_HOST: postgres
       MNEMONIC_DATABASE_POSTGRES_PASSWORD: mnemonic_dev
@@ -74,7 +74,7 @@ services:
       - mnemonic-network
 
   mnemonic_mcp:
-    image: ghcr.io/twistingmercury/mnemonic:latest
+    image: ghcr.io/twistingmercury/mnemonic:latest-dev
     environment:
       MNEMONIC_DATABASE_POSTGRES_HOST: postgres
       MNEMONIC_DATABASE_POSTGRES_PASSWORD: mnemonic_dev
@@ -98,7 +98,7 @@ services:
       - mnemonic-network
 
   mnemonic_enricher:
-    image: ghcr.io/twistingmercury/mnemonic-enrichment:latest
+    image: ghcr.io/twistingmercury/mnemonic-enrichment:latest-dev
     environment:
       MNEMONIC_DATABASE_POSTGRES_HOST: postgres
       MNEMONIC_DATABASE_POSTGRES_PASSWORD: mnemonic_dev
