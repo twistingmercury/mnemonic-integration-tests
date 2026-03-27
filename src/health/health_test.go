@@ -48,7 +48,7 @@ func TestAPIVersion_Returns200(t *testing.T) {
 }
 
 func TestMCPHealth_Returns200(t *testing.T) {
-	mcpURL := helpers.MCPBaseURL()
+	mcpURL := helpers.MCPOpsBaseURL()
 	httpClient := &http.Client{Timeout: 10 * time.Second}
 
 	resp, err := httpClient.Get(mcpURL + "/health")
@@ -63,7 +63,7 @@ func TestMCPHealth_Returns200(t *testing.T) {
 }
 
 func TestMCPVersion_Returns200(t *testing.T) {
-	mcpURL := helpers.MCPBaseURL()
+	mcpURL := helpers.MCPOpsBaseURL()
 	httpClient := &http.Client{Timeout: 10 * time.Second}
 
 	resp, err := httpClient.Get(mcpURL + "/version")

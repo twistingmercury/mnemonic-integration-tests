@@ -138,6 +138,7 @@ services:
     environment:
       - API_URL=http://mnemonic_api:8080
       - MCP_URL=http://mnemonic_mcp:8081
+      - MCP_OPS_URL=http://mnemonic_mcp:8080
       - ENRICHER_URL=http://mnemonic_enricher:8080
     depends_on:
       mnemonic_api:

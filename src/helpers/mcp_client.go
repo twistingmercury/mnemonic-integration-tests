@@ -10,12 +10,22 @@ import (
 	"time"
 )
 
-// MCPBaseURL returns the base URL for the MCP server from environment or default.
+// MCPBaseURL returns the base URL for the MCP JSON-RPC endpoint (port 8081).
 func MCPBaseURL() string {
 	if url := os.Getenv("MCP_URL"); url != "" {
 		return url
 	}
 	return "http://localhost:8081"
+}
+
+// MCPOpsBaseURL returns the base URL for the MCP operations endpoints
+// (health, version). The MCP server serves operations on its server.port
+// (default 8080), separate from the MCP JSON-RPC port.
+func MCPOpsBaseURL() string {
+	if url := os.Getenv("MCP_OPS_URL"); url != "" {
+		return url
+	}
+	return "http://localhost:8080"
 }
 
 // MCPClient wraps an HTTP client for issuing JSON-RPC requests to the MCP endpoint.
