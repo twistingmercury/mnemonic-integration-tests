@@ -25,7 +25,6 @@ stop: ## Tear down all containers and volumes
 	@printf "Stopping integration test infrastructure..."
 	@docker compose -f $(COMPOSE_FILE) down -v --remove-orphans > /dev/null 2>&1 || true
 	@docker rmi mnemonic_integration_tests:latest -f > /dev/null 2>&1 || true
-	@docker system prune -f > /dev/null 2>&1 || true
 	@printf "done\n"
 
 help: ## Show this help

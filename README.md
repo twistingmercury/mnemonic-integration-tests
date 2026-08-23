@@ -1,6 +1,7 @@
 # mnemonic-integration-tests
 
-> **Maturity Level**: Emerging — black-box integration smoke tests for the full Mnemonic stack
+> **Maturity Level**: Emerging — black-box smoke tests for the complete
+> Mnemonic stack.
 > **Version**: v0.0.1
 
 ---
@@ -15,215 +16,111 @@
 
 ## Usage
 
-Run the full integration test suite against a self-contained Docker Compose stack:
+Run the complete suite in a self-contained Docker Compose stack:
 
 ```bash
+# Required for enrichment and semantic-search coverage.
+export MNEMONIC_OPENAI_API_KEY="sk-..."
 make build
 ```
 
-Or run tests without tearing down the stack (for local development):
+For local investigation, start the application stack and run the test runner separately:
 
 ```bash
 make start
-# Stack is now running. Run tests manually or rebuild the test image:
-docker compose up --build mnemonic_tests
-make stop  # when done
+docker compose -f docker-compose.yaml up --build mnemonic_tests
+make stop
 ```
 
-Available Makefile targets:
+Available targets:
 
-- `make build` — Start infrastructure, build test runner, run all tests, tear down stack
-- `make test` — Alias for build
-- `make start` — Start the full stack without running tests
-- `make stop` — Tear down all containers and volumes
-- `make help` — Show available targets
-
-### Environment Variables
-
-- `MNEMONIC_OPENAI_API_KEY` (required for enrichment tests) — OpenAI API key for pattern enrichment and embedding search. Without this, enrichment will fail with a dummy key and search-related tests will skip.
-- `API_URL` (default: http://mnemonic_api:8080) — Mnemonic API endpoint (used inside Docker network)
-- `MCP_URL` (default: http://mnemonic_mcp:8081) — MCP JSON-RPC endpoint for `tools/list`, `get_pattern`, `search_patterns`, `find_related_patterns`
-- `MCP_OPS_URL` (default: http://mnemonic_mcp:8080) — MCP health and version operations
-- `ENRICHER_URL` (default: http://mnemonic_enricher:8080) — Enricher service health endpoint
+- `make build` — start the stack, run the suite, then tear it down
+- `make test` — alias for `make build`
+- `make start` — start infrastructure and application services without tests
+- `make stop` — remove this Compose stack and its volumes
+- `make help` — list targets
 
 ## How it works
 
-The test suite is a collection of black-box integration tests that exercise the full Mnemonic stack as an integrated system. All tests use only public HTTP interfaces.
+The suite exercises public HTTP interfaces only. Docker Compose starts
+PostgreSQL, Neo4j, RabbitMQ, the Mnemonic API, MCP server, and enrichment
+worker. The `mnemonic_tests` container waits for the services to become healthy
+and runs `go test -v -count=1 ./...`.
 
-### Stack Architecture
+The tests cover:
 
-The Docker Compose stack (`docker-compose.yaml`) brings up seven services:
+- service health and version endpoints;
+- pattern CRUD, filtering, semantic search, and enrichment through the REST API;
+- MCP tool discovery, pattern retrieval, search, and related-pattern lookup; and
+- the full create → enrich → MCP-search workflow.
 
-| Service | Image | Role |
-|---------|-------|------|
-| postgres | ghcr.io/twistingmercury/mnemonic-postgres:v1.0.0-dev | PostgreSQL with Mnemonic schema |
-| neo4j | ghcr.io/twistingmercury/mnemonic-neo4j:v1.0.0-dev | Neo4j graph database |
-| rabbitmq | rabbitmq:3-management-alpine | Message queue for enrichment jobs |
-| mnemonic_api | ghcr.io/twistingmercury/mnemonic-api:latest | REST API for pattern CRUD and search |
-| mnemonic_mcp | ghcr.io/twistingmercury/mnemonic:latest | MCP server exposing pattern tools |
-| mnemonic_enricher | ghcr.io/twistingmercury/mnemonic-enrichment:latest | Async enrichment worker (RabbitMQ-driven) |
-| mnemonic_tests | ./src/Dockerfile | Test runner container |
-
-Services depend on healthy databases and message queue before starting. The test runner waits for all application services to be healthy before executing tests.
-
-### Test Suites
-
-Tests are organized under `src/` in four packages:
-
-**health/** (6 tests)
-- Validates health and version endpoints for API, MCP, and enricher services
-- Verifies that all services are reachable and responding
-
-**api/** (8 tests)
-- Pattern CRUD operations via REST API (create, get, update, list, delete)
-- Search functionality (vector search, tag filtering, domain filtering)
-- Enrichment pipeline (create pattern → enrich → verify chunks populated)
-
-**mcp/** (5 tests)
-- MCP `tools/list` — lists available MCP tools
-- MCP `get_pattern` — fetches a pattern by ID
-- MCP `search_patterns` — semantic search over enriched patterns
-- MCP `find_related_patterns` — graph traversal to find related patterns
-
-**pipeline/** (1 test)
-- End-to-end centerpiece test: create pattern via API → wait for enrichment → verify MCP search finds it
-- Validates the complete flow from pattern creation through enrichment to searchability
-
-### Test Execution Flow
-
-1. Docker Compose starts infrastructure (postgres, neo4j, rabbitmq)
-2. Application services (api, mcp, enricher) start and wait for healthy databases
-3. Test runner container starts and waits for all services to be healthy
-4. Test runner executes all test packages with `go test ./...`
-5. On exit, `make build` tears down the entire stack
-
-Tests run inside the Docker network, so they use internal hostnames (e.g., `http://mnemonic_api:8080`).
+The application services use internal Docker DNS names such as `mnemonic_api`
+and `mnemonic_mcp`. They are not exposed to the host.
 
 ## Key Considerations
 
-- **Service Images Required**: All service container images (postgres, neo4j, api, mcp, enricher) must already exist locally or in GHCR before running tests. This project does not build them — it only orchestrates them.
-
-- **OpenAI API Key**: Enrichment and search tests require a valid `MNEMONIC_OPENAI_API_KEY` environment variable. Without a valid key, the enrichment worker will fail to generate embeddings, and tests that depend on semantic search will skip or fail. Set this before running:
-  ```bash
-  export MNEMONIC_OPENAI_API_KEY="sk-..."
-  make build
-  ```
-
-- **Black-Box Testing**: Tests only exercise public HTTP interfaces. They do not mock internal services or databases — they validate the entire integrated system end-to-end.
-
-- **Stateful Stack**: The Docker Compose stack maintains state across test runs (volumes persist). Use `make stop` to fully clean up databases and volumes between runs if you need a fresh state.
-
-- **Port Isolation**: Inside the Docker network, services use their internal hostnames and fixed ports. Service ports are not exposed to the host.
+- **Prerequisites:** Docker Compose and access to the required service images.
+  The integration project builds only the Go test-runner image; the API, MCP,
+  enrichment, PostgreSQL, and Neo4j images are pulled or must already be
+  available locally.
+- **OpenAI API key:** Set `MNEMONIC_OPENAI_API_KEY` to enable enrichment and
+  semantic-search coverage. Without a valid key, enrichment-dependent checks
+  cannot succeed.
+- **Isolation:** The stack publishes no host ports. Compose scopes its
+  containers, `mnemonic-network`, and database volumes under the
+  `mnemonic-integration-tests` project name, so it can run alongside other
+  Mnemonic Compose stacks.
+- **Cleanup:** `make stop` removes this project's containers and volumes. It
+  also runs `docker system prune -f`, which can remove unused Docker resources
+  from other projects; it does not stop running containers.
 
 ## Development Considerations
 
 ### Quick Start
 
-1. Ensure all service images exist:
-   ```bash
-   docker images | grep mnemonic
-   ```
-
-2. Set your OpenAI API key:
-   ```bash
-   export MNEMONIC_OPENAI_API_KEY="sk-..."
-   ```
-
-3. Run tests:
-   ```bash
-   make build
-   ```
-
-### Testing
-
-Run all tests:
-
 ```bash
+docker images | grep mnemonic
+export MNEMONIC_OPENAI_API_KEY="sk-..."
 make build
 ```
 
-Run tests against a standing stack (without teardown):
+### Testing and Debugging
 
-```bash
-# Start stack
-make start
-
-# Run tests manually
-cd src && go test -v ./...
-
-# Or rebuild and run test container
-docker compose up --build mnemonic_tests
-
-# Teardown when done
-make stop
-```
-
-Run a specific test suite:
+Run a standing stack, inspect logs or databases, then stop it:
 
 ```bash
 make start
-cd src && go test -v ./health
+docker compose -f docker-compose.yaml logs mnemonic_api mnemonic_enricher
+docker compose -f docker-compose.yaml exec postgres psql -U mnemonic -d mnemonic
+docker compose -f docker-compose.yaml exec neo4j cypher-shell -u neo4j -p mnemonic_dev
 make stop
 ```
 
-Run a single test:
+To run just one package while the stack is running, start a one-off test
+container with the package passed to Go:
 
 ```bash
 make start
-cd src && go test -v ./pipeline -run TestPipelineCreateEnrichMCPSearch
+docker compose -f docker-compose.yaml run --rm --entrypoint go mnemonic_tests \
+  test -v ./health
 make stop
 ```
 
-### Debugging
+Tests and shared HTTP/MCP helpers live under `src/`; add new coverage in the
+appropriate `src/{api,health,mcp,pipeline}/` package.
 
-To inspect the running stack:
+## Versioning
 
-```bash
-make start
-
-# Check service logs
-docker compose logs mnemonic_api
-docker compose logs mnemonic_enricher
-
-# Inspect test container
-docker compose exec mnemonic_tests sh
-
-# Query databases
-docker compose exec postgres psql -U mnemonic -d mnemonic
-docker compose exec neo4j cypher-shell -u neo4j -p mnemonic_dev
-
-make stop
-```
-
-### Adding Tests
-
-1. Create a test file under `src/{suite}/` (e.g., `src/api/new_test.go`)
-2. Use helpers from `src/helpers/` for HTTP clients, assertions, and polling
-3. Run with `go test -v ./...` against a standing stack
-4. Tests will run automatically when `make build` is invoked
-
-Test helpers available:
-
-- `helpers.NewTestClient(t)` — HTTP client preconfigured with `API_URL`
-- `helpers.NewMCPClient(t)` — MCP JSON-RPC client preconfigured with `MCP_URL`
-- `helpers.AssertStatusCode(t, resp, code)` — Assert HTTP response status
-- `helpers.ParseJSON[T](t, resp)` — Parse JSON response body
-- `helpers.PollForEnrichment(t, client, id, timeout)` — Poll until pattern enrichment completes
-- `helpers.CreateTestPattern(t, client)` — Create a minimal test pattern via API
-- `helpers.CreateEnrichablePattern(t, client)` — Create a pattern with enrichable content
-
-### Versioning
-
-This project follows [Semantic Versioning 2.0.0](https://semver.org/).
-
-Version is determined from git tags:
+This project follows [Semantic Versioning 2.0.0](https://semver.org/). Version
+is determined from Git tags:
 
 ```bash
 git describe --tags --always
 ```
 
-Currently at **v0.0.1** (development).
+With no release tag, the documented development version is `v0.0.1`.
 
 ---
 
-**Part of the Mnemonic multi-repo workspace.** See [mnemonic-docs](../mnemonic-docs) for architecture and design documentation.
+Part of the Mnemonic multi-repository workspace. See `../mnemonic-docs` for
+architecture and design documentation.

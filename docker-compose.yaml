@@ -131,7 +131,6 @@ services:
     build:
       context: ./src
       dockerfile: Dockerfile
-    container_name: mnemonic_integration_tests
     environment:
       - API_URL=http://mnemonic_api:8080
       - MCP_URL=http://mnemonic_mcp:8081
