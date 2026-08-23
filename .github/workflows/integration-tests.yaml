@@ -27,3 +27,13 @@ jobs:
         env:
           MNEMONIC_OPENAI_API_KEY: ${{ secrets.MNEMONIC_OPENAI_API_KEY }}
         run: make build
+
+      - name: Capture Compose diagnostics
+        if: failure()
+        run: |
+          docker compose -f docker-compose.yaml ps
+          docker compose -f docker-compose.yaml logs --no-color
+
+      - name: Tear down Compose stack
+        if: always()
+        run: docker compose -f docker-compose.yaml down -v --remove-orphans
