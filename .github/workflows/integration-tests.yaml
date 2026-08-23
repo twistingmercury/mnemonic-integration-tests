@@ -1,6 +1,9 @@
 name: Integration Tests
 
 on:
+  push:
+    branches:
+      - develop
   schedule:
     - cron: "0 0 * * *" # midnight UTC daily
   workflow_dispatch:
