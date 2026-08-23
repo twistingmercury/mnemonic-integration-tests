@@ -28,7 +28,8 @@ services:
       test: ["CMD-SHELL", "cypher-shell -u neo4j -p mnemonic_dev 'RETURN 1' || exit 1"]
       interval: 10s
       timeout: 5s
-      retries: 5
+      start_period: 60s
+      retries: 12
     networks:
       - mnemonic-network
 
