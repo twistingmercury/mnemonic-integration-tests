@@ -2,7 +2,7 @@
 
 > **Maturity Level**: Emerging — black-box smoke tests for the complete
 > Mnemonic stack.
-> **Version**: v0.0.1
+> **Version**: v0.0.2
 
 ---
 
@@ -11,6 +11,7 @@
 - [Usage](#usage)
 - [How it works](#how-it-works)
 - [Key Considerations](#key-considerations)
+- [Continuous Integration](#continuous-integration)
 - [Development Considerations](#development-considerations)
 - [Versioning](#versioning)
 
@@ -74,6 +75,16 @@ and `mnemonic_mcp`. They are not exposed to the host.
   also runs `docker system prune -f`, which can remove unused Docker resources
   from other projects; it does not stop running containers.
 
+## Continuous Integration
+
+GitHub Actions runs the complete `make build` suite for every push to
+`develop`, including merged pull requests. It also runs daily at midnight UTC
+and can be started manually.
+
+On failure, the workflow captures Compose service status and logs before
+tearing down the stack. CI requires the `MNEMONIC_OPENAI_API_KEY` repository
+secret for enrichment and semantic-search coverage.
+
 ## Development Considerations
 
 ### Quick Start
@@ -118,7 +129,7 @@ is determined from Git tags:
 git describe --tags --always
 ```
 
-With no release tag, the documented development version is `v0.0.1`.
+The current release tag is `v0.0.2`.
 
 ---
 
