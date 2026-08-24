@@ -133,5 +133,5 @@ The current release tag is `v0.0.2`.
 
 ---
 
-Part of the Mnemonic multi-repository workspace. See `../mnemonic-docs` for
+Part of the Mnemonic multi-repository workspace. See `[mnemonic-docs](https://github.com/twistingmercury/mnemonic-docs)` for
 architecture and design documentation.
