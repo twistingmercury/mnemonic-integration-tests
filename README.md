@@ -71,9 +71,9 @@ and `mnemonic_mcp`. They are not exposed to the host.
   containers, `mnemonic-network`, and database volumes under the
   `mnemonic-integration-tests` project name, so it can run alongside other
   Mnemonic Compose stacks.
-- **Cleanup:** `make stop` removes this project's containers and volumes. It
-  also runs `docker system prune -f`, which can remove unused Docker resources
-  from other projects; it does not stop running containers.
+- **Cleanup:** `make stop` removes this Compose project's containers (including
+  orphans), networks, and volumes. It also force-removes the local
+  `mnemonic_integration_tests:latest` test-runner image.
 
 ## Continuous Integration
 
@@ -133,5 +133,6 @@ The current release tag is `v0.0.2`.
 
 ---
 
-Part of the Mnemonic multi-repository workspace. See [mnemonic-docs](https://github.com/twistingmercury/mnemonic-docs) for
+Part of the Mnemonic multi-repository workspace. See
+[mnemonic-docs](https://github.com/twistingmercury/mnemonic-docs) for
 architecture and design documentation.
