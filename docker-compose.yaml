@@ -129,6 +129,7 @@ services:
       - mnemonic-network
 
   mnemonic_tests:
+    image: mnemonic_integration_tests:latest
     build:
       context: ./src
       dockerfile: Dockerfile

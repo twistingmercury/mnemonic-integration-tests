@@ -1,8 +1,8 @@
-.PHONY: build test start stop help
+.DEFAULT_GOAL := help
+
+.PHONY: help build test start stop analyze
 
 COMPOSE_FILE := docker-compose.yaml
-
-default: help
 
 build: ## Build test runner image and run all integration tests
 	@printf "\n=== Starting integration test infrastructure ===\n"
@@ -26,6 +26,9 @@ stop: ## Tear down all containers and volumes
 	@docker compose -f $(COMPOSE_FILE) down -v --remove-orphans > /dev/null 2>&1 || true
 	@docker rmi mnemonic_integration_tests:latest -f > /dev/null 2>&1 || true
 	@printf "done\n"
+
+analyze: ## Lint all tracked Markdown files
+	markdownlint -c .markdownlint.json $$(git ls-files '*.md')
 
 help: ## Show this help
 	@awk 'BEGIN {FS = ":.*##"; printf "\nAvailable targets:\n"} /^[a-zA-Z0-9_-]+:.*##/ { printf "  %-20s %s\n", $$1, $$2 }' $(MAKEFILE_LIST)

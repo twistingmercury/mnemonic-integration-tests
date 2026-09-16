@@ -2,7 +2,7 @@
 
 > **Maturity Level**: Emerging — black-box smoke tests for the complete
 > Mnemonic stack.
-> **Version**: v0.0.2
+> **Version**: v0.0.3
 
 ---
 
@@ -39,19 +39,22 @@ Available targets:
 - `make test` — alias for `make build`
 - `make start` — start infrastructure and application services without tests
 - `make stop` — remove this Compose stack and its volumes
-- `make help` — list targets
+- `make analyze` — lint all tracked Markdown files
+- `make help` — list targets (default)
 
 ## How it works
 
 The suite exercises public HTTP interfaces only. Docker Compose starts
 PostgreSQL, Neo4j, RabbitMQ, the Mnemonic API, MCP server, and enrichment
-worker. The `mnemonic_tests` container waits for the services to become healthy
-and runs `go test -v -count=1 ./...`.
+worker. The `mnemonic_tests` container starts once the API, MCP, and enrichment
+services report healthy, polls `/health` on the API, then runs
+`go test -v -count=1 ./...`.
 
 The tests cover:
 
 - service health and version endpoints;
-- pattern CRUD, filtering, semantic search, and enrichment through the REST API;
+- pattern CRUD, listing with pagination, semantic search, and enrichment
+  through the REST API;
 - MCP tool discovery, pattern retrieval, search, and related-pattern lookup; and
 - the full create → enrich → MCP-search workflow.
 
@@ -62,8 +65,12 @@ and `mnemonic_mcp`. They are not exposed to the host.
 
 - **Prerequisites:** Docker Compose and access to the required service images.
   The integration project builds only the Go test-runner image; the API, MCP,
-  enrichment, PostgreSQL, and Neo4j images are pulled or must already be
-  available locally.
+  enrichment, PostgreSQL, Neo4j, and RabbitMQ images are pulled or must already
+  be available locally.
+- **Go toolchain:** The test runner uses Go 1.27.1 from
+  `ghcr.io/twistingmercury/golang-tooling:go1.27.1`. Docker supplies Go for
+  Compose runs; a local Go 1.27.1 or newer toolchain is needed only when running
+  tests directly outside Docker.
 - **OpenAI API key:** Set `MNEMONIC_OPENAI_API_KEY` to enable enrichment and
   semantic-search coverage. Without a valid key, enrichment-dependent checks
   cannot succeed.
@@ -95,7 +102,11 @@ export MNEMONIC_OPENAI_API_KEY="sk-..."
 make build
 ```
 
-### Testing and Debugging
+### Building & running
+
+See [Usage](#usage) for the Docker Compose build and run commands.
+
+### Testing
 
 Run a standing stack, inspect logs or databases, then stop it:
 
@@ -120,7 +131,7 @@ make stop
 Tests and shared HTTP/MCP helpers live under `src/`; add new coverage in the
 appropriate `src/{api,health,mcp,pipeline}/` package.
 
-## Versioning
+### Versioning
 
 This project follows [Semantic Versioning 2.0.0](https://semver.org/). Version
 is determined from Git tags:
@@ -129,7 +140,7 @@ is determined from Git tags:
 git describe --tags --always
 ```
 
-The current release tag is `v0.0.2`.
+The current release tag is `v0.0.3`.
 
 ---
 
