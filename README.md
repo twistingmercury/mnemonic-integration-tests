@@ -17,119 +17,99 @@
 
 ## Usage
 
-Run the complete suite in a self-contained Docker Compose stack:
+Run the complete suite in a self-contained Docker Compose stack. No OpenAI key
+is needed:
 
 ```bash
-# Required for enrichment and semantic-search coverage.
-export MNEMONIC_OPENAI_API_KEY="sk-..."
-make build
-```
-
-For local investigation, start the application stack and run the test runner separately:
-
-```bash
-make start
-docker compose -f docker-compose.yaml up --build mnemonic_tests
-make stop
+make test
 ```
 
 Available targets:
 
-- `make build` — start the stack, run the suite, then tear it down
-- `make test` — alias for `make build`
-- `make start` — start infrastructure and application services without tests
+- `make test` — start the stack, run the suite, then tear it down
+- `make start` — start the stack without running tests
 - `make stop` — remove this Compose stack and its volumes
 - `make analyze` — lint all tracked Markdown files
 - `make help` — list targets (default)
 
 ## How it works
 
-The suite exercises public HTTP interfaces only. Docker Compose starts
-PostgreSQL, Neo4j, RabbitMQ, the Mnemonic API, MCP server, and enrichment
-worker. The `mnemonic_tests` container starts once the API, MCP, and enrichment
-services report healthy, polls `/health` on the API, then runs
-`go test -v -count=1 ./...`.
+```text
+            ┌──────────┐  publish  ┌──────────┐  consume  ┌──────────┐
+  tests ──► │   API    │ ────────► │ RabbitMQ │ ────────► │ Enricher │
+            └────┬─────┘           └──────────┘           └────┬─────┘
+                 │ write                                       │ embed, extract
+                 ▼                                             ▼
+            ┌──────────┐                                  ┌──────────┐
+            │ Postgres │ ◄──── chunks, embeddings ─────── │  Neo4j   │
+            └────┬─────┘                                  └────┬─────┘
+                 └──────────────► ┌──────────┐ ◄───────────────┘
+                                  │   MCP    │ ◄──── tests
+                                  └──────────┘
+   All three services call the OpenAI stub instead of api.openai.com.
+```
 
-The tests cover:
+Each service's own E2E suite already covers its endpoints in detail. This
+suite covers only what none of them can: a pattern written through the API,
+enriched by the enricher, and read back through the MCP server.
 
-- service health and version endpoints;
-- pattern CRUD, listing with pagination, semantic search, and enrichment
-  through the REST API;
-- MCP tool discovery, pattern retrieval, search, and related-pattern lookup; and
-- the full create → enrich → MCP-search workflow.
+| Test | What it proves |
+|---|---|
+| `TestServicesHealthy` | Each service's `/health` lists every dependency it is wired to, all `OK` |
+| `TestPatternFlowsFromAPIToMCP` | Create → enriched → found by API and MCP search → MCP `get_pattern` shows extracted concepts |
+| `TestUpdateReenrichesPattern` | An update is re-enriched; search finds the new text, not the old |
+| `TestRelatedPatternsAndDelete` | Shared concepts link patterns in Neo4j; a delete removes the pattern from every MCP read path |
+| `TestEnricherRetriesFailedJob` | A failed OpenAI call fails the job and the enricher's retry sweep recovers it |
 
-The application services use internal Docker DNS names such as `mnemonic_api`
-and `mnemonic_mcp`. They are not exposed to the host.
+### OpenAI stub
+
+`openai-stub/` replaces OpenAI for all three services through
+`MNEMONIC_OPENAI_BASE_URL`, so runs are deterministic and free:
+
+- **Embeddings** hash each distinct word of the input into the vector, so
+  cosine similarity tracks shared words. Tests search for a random word only
+  one pattern contains, with a low threshold (0.1).
+- **Concept extraction** returns the concepts on a `Concepts: a, b` line of
+  the pattern content.
+- **`POST /control/fail?match=X&n=N`** fails the next N embedding requests
+  whose input contains X.
+
+The enricher runs with `MNEMONIC_OPENAI_RETRY_ATTEMPTS=0` and
+`MNEMONIC_ENRICHMENT_RETRY_DELAY=1s` so one forced failure reaches its retry
+sweep quickly.
 
 ## Key Considerations
 
-- **Prerequisites:** Docker Compose and access to the required service images.
-  The integration project builds only the Go test-runner image; the API, MCP,
-  enrichment, PostgreSQL, Neo4j, and RabbitMQ images are pulled or must already
-  be available locally.
-- **Go toolchain:** The test runner uses Go 1.27.1 from
-  `ghcr.io/twistingmercury/golang-tooling:go1.27.1`. Docker supplies Go for
-  Compose runs; a local Go 1.27.1 or newer toolchain is needed only when running
-  tests directly outside Docker.
-- **OpenAI API key:** Set `MNEMONIC_OPENAI_API_KEY` to enable enrichment and
-  semantic-search coverage. Without a valid key, enrichment-dependent checks
-  cannot succeed.
-- **Isolation:** The stack publishes no host ports. Compose scopes its
-  containers, `mnemonic-network`, and database volumes under the
-  `mnemonic-integration-tests` project name, so it can run alongside other
-  Mnemonic Compose stacks.
-- **Cleanup:** `make stop` removes this Compose project's containers (including
-  orphans), networks, and volumes. It also force-removes the local
-  `mnemonic_integration_tests:latest` test-runner image.
+- **Prerequisites:** Docker Compose and pull access to the service images on
+  ghcr.io. The tests run in the stock `golang:1.27.2-alpine` image with `src/`
+  mounted read-only; only the small stub image is built.
+- **Images under test:** the `latest-dev` tags of `mnemonic-api`, `mnemonic`
+  (MCP) and `mnemonic-enrichment`, published by each service's CI on merge to
+  `develop`.
+- **Isolation:** the stack publishes no host ports. Compose scopes its
+  containers, network and volumes under the `mnemonic-integration-tests`
+  project name, so it can run alongside other Mnemonic stacks.
 
 ## Continuous Integration
 
-GitHub Actions runs the complete `make build` suite for every push to
-`develop`, including merged pull requests. It also runs daily at midnight UTC
-and can be started manually.
-
-On failure, the workflow captures Compose service status and logs before
-tearing down the stack. CI requires the `MNEMONIC_OPENAI_API_KEY` repository
-secret for enrichment and semantic-search coverage.
+GitHub Actions runs the suite on pull requests to `develop` and `main`, on
+every push to `develop`, daily at midnight UTC, and on demand. On failure it
+prints Compose service status and logs before tearing the stack down.
 
 ## Development Considerations
 
-### Quick Start
-
-```bash
-docker images | grep mnemonic
-export MNEMONIC_OPENAI_API_KEY="sk-..."
-make build
-```
-
-### Building & running
-
-See [Usage](#usage) for the Docker Compose build and run commands.
-
-### Testing
-
-Run a standing stack, inspect logs or databases, then stop it:
+Run a standing stack, inspect it, then stop it:
 
 ```bash
 make start
-docker compose -f docker-compose.yaml logs mnemonic_api mnemonic_enricher
-docker compose -f docker-compose.yaml exec postgres psql -U mnemonic -d mnemonic
-docker compose -f docker-compose.yaml exec neo4j cypher-shell -u neo4j -p mnemonic_dev
+docker compose -f docker-compose.yaml run --rm mnemonic_tests go test -count=1 -run TestUpdate ./...
+docker compose -f docker-compose.yaml logs mnemonic_enricher
 make stop
 ```
 
-To run just one package while the stack is running, start a one-off test
-container with the package passed to Go:
-
-```bash
-make start
-docker compose -f docker-compose.yaml run --rm --entrypoint go mnemonic_tests \
-  test -v ./health
-make stop
-```
-
-Tests and shared HTTP/MCP helpers live under `src/`; add new coverage in the
-appropriate `src/{api,health,mcp,pipeline}/` package.
+All tests live in one package under `src/`; `client_test.go` holds the HTTP,
+MCP and polling helpers. Add a test here only when it needs more than one
+service; single-service behaviour belongs in that service's E2E suite.
 
 ### Versioning
 

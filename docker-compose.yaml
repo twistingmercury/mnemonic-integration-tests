@@ -9,9 +9,9 @@ services:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U mnemonic"]
-      interval: 10s
+      interval: 2s
       timeout: 5s
-      retries: 5
+      retries: 30
     networks:
       - mnemonic-network
 
@@ -26,10 +26,10 @@ services:
       - neo4j-data:/data
     healthcheck:
       test: ["CMD-SHELL", "cypher-shell -u neo4j -p mnemonic_dev 'RETURN 1' || exit 1"]
-      interval: 10s
+      interval: 3s
       timeout: 5s
       start_period: 60s
-      retries: 12
+      retries: 40
     networks:
       - mnemonic-network
 
@@ -40,9 +40,16 @@ services:
       RABBITMQ_DEFAULT_PASS: mnemonic_dev
     healthcheck:
       test: ["CMD", "rabbitmq-diagnostics", "ping"]
-      interval: 10s
+      interval: 3s
       timeout: 5s
-      retries: 5
+      retries: 40
+    networks:
+      - mnemonic-network
+
+  # Stands in for OpenAI so runs are deterministic and need no key.
+  openai_stub:
+    build:
+      context: ./openai-stub
     networks:
       - mnemonic-network
 
@@ -54,12 +61,15 @@ services:
       MNEMONIC_DATABASE_POSTGRES_SSL_MODE: disable
       MNEMONIC_DATABASE_NEO4J_URI: bolt://neo4j:7687
       MNEMONIC_DATABASE_NEO4J_PASSWORD: mnemonic_dev
-      MNEMONIC_OPENAI_API_KEY: ${MNEMONIC_OPENAI_API_KEY:-sk-test-dummy}
+      MNEMONIC_OPENAI_API_KEY: sk-test
+      MNEMONIC_OPENAI_BASE_URL: http://openai_stub:8090/v1
       MNEMONIC_LOGGING_LEVEL: error
       MNEMONIC_QUEUE_RABBITMQ_HOST: rabbitmq
       MNEMONIC_QUEUE_RABBITMQ_USER: mnemonic
       MNEMONIC_QUEUE_RABBITMQ_PASSWORD: mnemonic_dev
     depends_on:
+      openai_stub:
+        condition: service_healthy
       neo4j:
         condition: service_healthy
       postgres:
@@ -82,10 +92,13 @@ services:
       MNEMONIC_DATABASE_POSTGRES_SSL_MODE: disable
       MNEMONIC_DATABASE_NEO4J_URI: bolt://neo4j:7687
       MNEMONIC_DATABASE_NEO4J_PASSWORD: mnemonic_dev
-      MNEMONIC_OPENAI_API_KEY: ${MNEMONIC_OPENAI_API_KEY:-sk-test-dummy}
+      MNEMONIC_OPENAI_API_KEY: sk-test
+      MNEMONIC_OPENAI_BASE_URL: http://openai_stub:8090/v1
       MNEMONIC_MCP_PORT: 8081
       MNEMONIC_LOGGING_LEVEL: error
     depends_on:
+      openai_stub:
+        condition: service_healthy
       neo4j:
         condition: service_healthy
       postgres:
@@ -111,9 +124,16 @@ services:
       MNEMONIC_QUEUE_RABBITMQ_USER: mnemonic
       MNEMONIC_QUEUE_RABBITMQ_PASSWORD: mnemonic_dev
       MNEMONIC_QUEUE_RABBITMQ_QUEUE: enrichment-jobs
-      MNEMONIC_OPENAI_API_KEY: ${MNEMONIC_OPENAI_API_KEY:-sk-test-dummy}
+      # A failed OpenAI call fails the job at once and is retried 1s later by
+      # the sweep, which TestEnricherRetriesFailedJob relies on.
+      MNEMONIC_OPENAI_RETRY_ATTEMPTS: 0
+      MNEMONIC_ENRICHMENT_RETRY_DELAY: 1s
+      MNEMONIC_OPENAI_API_KEY: sk-test
+      MNEMONIC_OPENAI_BASE_URL: http://openai_stub:8090/v1
       MNEMONIC_LOGGING_LEVEL: error
     depends_on:
+      openai_stub:
+        condition: service_healthy
       neo4j:
         condition: service_healthy
       postgres:
@@ -129,15 +149,19 @@ services:
       - mnemonic-network
 
   mnemonic_tests:
-    image: mnemonic_integration_tests:latest
-    build:
-      context: ./src
-      dockerfile: Dockerfile
+    image: golang:1.27.2-alpine
+    working_dir: /src
+    volumes:
+      - ./src:/src:ro
     environment:
-      - API_URL=http://mnemonic_api:8080
-      - MCP_URL=http://mnemonic_mcp:8081
-      - MCP_OPS_URL=http://mnemonic_mcp:8080
-      - ENRICHER_URL=http://mnemonic_enricher:8080
+      CGO_ENABLED: "0"
+      GOTOOLCHAIN: local
+      API_URL: http://mnemonic_api:8080
+      MCP_URL: http://mnemonic_mcp:8081
+      MCP_OPS_URL: http://mnemonic_mcp:8080
+      ENRICHER_URL: http://mnemonic_enricher:8080
+      OPENAI_STUB_URL: http://openai_stub:8090
+    command: ["go", "test", "-count=1", "-v", "./..."]
     depends_on:
       mnemonic_api:
         condition: service_healthy

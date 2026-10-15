@@ -1,9 +1,8 @@
-// Package integration_tests provides end-to-end integration smoke tests for
-// the full Mnemonic stack. Tests in this package require a live stack (API,
-// MCP, enricher, postgres, neo4j, rabbitmq) and treat all services as black
-// boxes, exercising only their public HTTP interfaces.
+// Package integration tests the whole Mnemonic stack through its public HTTP
+// interfaces: the REST API, the MCP endpoint, each service's /health, and the
+// OpenAI stub's control endpoint. It covers only what no single service's own
+// E2E suite can: a pattern written through the API, enriched by the enricher
+// via RabbitMQ, and read back through the MCP server.
 //
-// Run with:
-//
-//	go test -v -count=1 ./...
-package integration_tests
+// It needs the Compose stack in the repository root; run it with make test.
+package integration
