@@ -1,31 +1,18 @@
 .DEFAULT_GOAL := help
 
-.PHONY: help build test start stop analyze
+.PHONY: help test start stop analyze
 
-COMPOSE_FILE := docker-compose.yaml
+COMPOSE := docker compose -f docker-compose.yaml
 
-build: ## Build test runner image and run all integration tests
-	@printf "\n=== Starting integration test infrastructure ===\n"
-	docker compose -f $(COMPOSE_FILE) up -d postgres neo4j rabbitmq
-	@printf "\n=== Starting application services ===\n"
-	docker compose -f $(COMPOSE_FILE) up \
-		--build \
-		--abort-on-container-exit \
-		--exit-code-from mnemonic_tests \
-		mnemonic_api mnemonic_mcp mnemonic_enricher mnemonic_tests
-	@$(MAKE) stop
+test: ## Start the stack, run the suite, then tear everything down
+	@$(COMPOSE) up --build --abort-on-container-exit --exit-code-from mnemonic_tests; \
+		status=$$?; $(MAKE) --no-print-directory stop; exit $$status
 
-test: build ## Alias for build
-
-start: ## Start the full stack without running tests (for local dev)
-	docker compose -f $(COMPOSE_FILE) up -d postgres neo4j rabbitmq
-	docker compose -f $(COMPOSE_FILE) up -d mnemonic_api mnemonic_mcp mnemonic_enricher
+start: ## Start the stack without running tests (for local investigation)
+	$(COMPOSE) up --build -d --wait mnemonic_api mnemonic_mcp mnemonic_enricher
 
 stop: ## Tear down all containers and volumes
-	@printf "Stopping integration test infrastructure..."
-	@docker compose -f $(COMPOSE_FILE) down -v --remove-orphans > /dev/null 2>&1 || true
-	@docker rmi mnemonic_integration_tests:latest -f > /dev/null 2>&1 || true
-	@printf "done\n"
+	@$(COMPOSE) down -v --remove-orphans > /dev/null 2>&1 || true
 
 analyze: ## Lint all tracked Markdown files
 	markdownlint -c .markdownlint.json $$(git ls-files '*.md')

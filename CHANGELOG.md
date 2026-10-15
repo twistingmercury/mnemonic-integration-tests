@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- An OpenAI stub (`openai-stub/`) that all three services use through
+  `MNEMONIC_OPENAI_BASE_URL`. Runs are deterministic and need no OpenAI key.
+- Cross-service tests for re-enrichment after an update, removal from every
+  MCP read path after a delete, related patterns found through shared
+  concepts, and the enricher's retry sweep recovering a failed job.
+- A `pull_request` trigger, so changes to this suite are tested before merge.
+
+### Changed
+
+- The suite now covers only paths that span services. Tests that repeated a
+  single service's own E2E coverage (API CRUD, MCP tool validation, per-service
+  version checks) are removed; health is one table-driven test that checks
+  every dependency is `OK`.
+- Tests run in the stock `golang:1.27.2-alpine` image with `src/` mounted,
+  replacing the 708 MB test-runner image and its readiness script.
+- All tests are in one package with no third-party dependencies.
+- `make build` is now `make test`.
+- Go 1.27.2.
+
+### Removed
+
+- The `MNEMONIC_OPENAI_API_KEY` secret requirement.
+- Unused request headers (`X-User-ID`, `X-Team-ID`, `X-User-Roles`) and
+  helper types.
+
 ## [0.0.3] - 2026-09-09
 
 ### Added

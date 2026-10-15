@@ -4,6 +4,10 @@ on:
   push:
     branches:
       - develop
+  pull_request:
+    branches:
+      - develop
+      - main
   schedule:
     - cron: "0 0 * * *" # midnight UTC daily
   workflow_dispatch:
@@ -17,19 +21,19 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Log in to Container Registry
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # Compose directly rather than make test, so the stack is still up for
+      # the diagnostics step when a test fails.
       - name: Run integration tests
-        env:
-          MNEMONIC_OPENAI_API_KEY: ${{ secrets.MNEMONIC_OPENAI_API_KEY }}
-        run: make build
+        run: docker compose -f docker-compose.yaml up --build --abort-on-container-exit --exit-code-from mnemonic_tests
 
       - name: Capture Compose diagnostics
         if: failure()
