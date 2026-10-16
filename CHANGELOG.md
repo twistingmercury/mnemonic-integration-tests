@@ -18,6 +18,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- MCP tool calls are sent as MCP protocol version 2026-07-28 requests: the
+  protocol version, client info and capabilities in `_meta`, with the
+  `MCP-Protocol-Version`, `Mcp-Method` and `Mcp-Name` headers.
+- Test tokens are re-rolled when the OpenAI stub would hash them to the same
+  dimension as a shared pattern word or another token. Such a collision made a
+  search for a missing token match every test pattern, so
+  `TestUpdateReenrichesPattern` failed now and then.
 - The suite now covers only paths that span services. Tests that repeated a
   single service's own E2E coverage (API CRUD, MCP tool validation, per-service
   version checks) are removed; health is one table-driven test that checks

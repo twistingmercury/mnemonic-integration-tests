@@ -6,13 +6,16 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"hash/fnv"
 	"io"
 	"net/http"
 	"net/url"
 	"os"
 	"strings"
+	"sync"
 	"testing"
 	"time"
+	"unicode"
 )
 
 var (
@@ -36,20 +39,64 @@ func env(key, fallback string) string {
 	return fallback
 }
 
+// stubDims is the embedding size the services request from the OpenAI stub
+// (openai.embedding_dimensions).
+const stubDims = 2000
+
+// tokenDims holds the stub embedding dimension of every word the test
+// patterns share, and of every token handed out so far.
+var (
+	tokenMu   sync.Mutex
+	tokenDims map[uint32]bool
+)
+
+// stubDim is the dimension the OpenAI stub hashes word to.
+func stubDim(word string) uint32 {
+	h := fnv.New32a()
+	_, _ = h.Write([]byte(word))
+	return h.Sum32() % stubDims
+}
+
 // token returns a random word no other pattern contains, so a search for it
-// finds only the pattern that holds it.
+// finds only the pattern that holds it. The stub hashes each word to one
+// dimension, so a token is re-rolled when its dimension is already taken by a
+// shared word or another token; otherwise a search for it would match every
+// pattern holding the colliding word.
 func token(t *testing.T) string {
 	t.Helper()
-	b := make([]byte, 6)
-	if _, err := rand.Read(b); err != nil {
-		t.Fatalf("random token: %v", err)
+	tokenMu.Lock()
+	defer tokenMu.Unlock()
+	if tokenDims == nil {
+		tokenDims = map[uint32]bool{}
+		shared := patternContent("", "errors", "wrapping", "unrelated") + " integ a b c integration-test"
+		for _, w := range strings.FieldsFunc(strings.ToLower(shared), func(r rune) bool {
+			return !unicode.IsLetter(r) && !unicode.IsDigit(r)
+		}) {
+			tokenDims[stubDim(w)] = true
+		}
 	}
-	return "tok" + hex.EncodeToString(b)
+	b := make([]byte, 6)
+	for {
+		if _, err := rand.Read(b); err != nil {
+			t.Fatalf("random token: %v", err)
+		}
+		tok := "tok" + hex.EncodeToString(b)
+		if d := stubDim(tok); !tokenDims[d] {
+			tokenDims[d] = true
+			return tok
+		}
+	}
 }
 
 // call sends a JSON request and returns the status and body. A nil body sends
 // no payload.
 func call(t *testing.T, method, rawURL string, body any) (int, []byte) {
+	t.Helper()
+	return callWith(t, method, rawURL, body, nil)
+}
+
+// callWith is call with extra request headers.
+func callWith(t *testing.T, method, rawURL string, body any, headers map[string]string) (int, []byte) {
 	t.Helper()
 	var r io.Reader
 	if body != nil {
@@ -67,6 +114,9 @@ func call(t *testing.T, method, rawURL string, body any) (int, []byte) {
 	req.Header.Set("Accept", "application/json, text/event-stream")
 	// The stub only checks that a key is present; the services send their own.
 	req.Header.Set("Authorization", "Bearer sk-test")
+	for k, v := range headers {
+		req.Header.Set(k, v)
+	}
 	resp, err := httpClient.Do(req)
 	if err != nil {
 		t.Fatalf("%s %s: %v", method, rawURL, err)
@@ -193,15 +243,32 @@ func apiSearch(t *testing.T, query string) []string {
 	return ids
 }
 
+// mcpProtocolVersion is the MCP protocol version the tests speak.
+const mcpProtocolVersion = "2026-07-28"
+
 // mcpTool calls an MCP tool and returns its text and whether the tool or the
-// JSON-RPC layer reported an error.
+// JSON-RPC layer reported an error. It sends a 2026-07-28 request: no
+// initialize handshake, the protocol version and client capabilities in
+// _meta, and the method and tool name mirrored into headers.
 func mcpTool(t *testing.T, name string, args map[string]any) (text string, isError bool) {
 	t.Helper()
-	status, data := call(t, http.MethodPost, mcpURL+"/mcp", map[string]any{
+	status, data := callWith(t, http.MethodPost, mcpURL+"/mcp", map[string]any{
 		"jsonrpc": "2.0",
 		"id":      1,
 		"method":  "tools/call",
-		"params":  map[string]any{"name": name, "arguments": args},
+		"params": map[string]any{
+			"name":      name,
+			"arguments": args,
+			"_meta": map[string]any{
+				"io.modelcontextprotocol/protocolVersion":    mcpProtocolVersion,
+				"io.modelcontextprotocol/clientInfo":         map[string]any{"name": "mnemonic-integration-tests", "version": "0"},
+				"io.modelcontextprotocol/clientCapabilities": map[string]any{},
+			},
+		},
+	}, map[string]string{
+		"MCP-Protocol-Version": mcpProtocolVersion,
+		"Mcp-Method":           "tools/call",
+		"Mcp-Name":             name,
 	})
 	if status != http.StatusOK {
 		t.Fatalf("MCP %s: status %d\nbody: %s", name, status, data)
