@@ -51,6 +51,12 @@ func token(t *testing.T) string {
 // no payload.
 func call(t *testing.T, method, rawURL string, body any) (int, []byte) {
 	t.Helper()
+	return callWith(t, method, rawURL, body, nil)
+}
+
+// callWith is call with extra request headers.
+func callWith(t *testing.T, method, rawURL string, body any, headers map[string]string) (int, []byte) {
+	t.Helper()
 	var r io.Reader
 	if body != nil {
 		data, err := json.Marshal(body)
@@ -67,6 +73,9 @@ func call(t *testing.T, method, rawURL string, body any) (int, []byte) {
 	req.Header.Set("Accept", "application/json, text/event-stream")
 	// The stub only checks that a key is present; the services send their own.
 	req.Header.Set("Authorization", "Bearer sk-test")
+	for k, v := range headers {
+		req.Header.Set(k, v)
+	}
 	resp, err := httpClient.Do(req)
 	if err != nil {
 		t.Fatalf("%s %s: %v", method, rawURL, err)
@@ -193,15 +202,32 @@ func apiSearch(t *testing.T, query string) []string {
 	return ids
 }
 
+// mcpProtocolVersion is the MCP protocol version the tests speak.
+const mcpProtocolVersion = "2026-07-28"
+
 // mcpTool calls an MCP tool and returns its text and whether the tool or the
-// JSON-RPC layer reported an error.
+// JSON-RPC layer reported an error. It sends a 2026-07-28 request: no
+// initialize handshake, the protocol version and client capabilities in
+// _meta, and the method and tool name mirrored into headers.
 func mcpTool(t *testing.T, name string, args map[string]any) (text string, isError bool) {
 	t.Helper()
-	status, data := call(t, http.MethodPost, mcpURL+"/mcp", map[string]any{
+	status, data := callWith(t, http.MethodPost, mcpURL+"/mcp", map[string]any{
 		"jsonrpc": "2.0",
 		"id":      1,
 		"method":  "tools/call",
-		"params":  map[string]any{"name": name, "arguments": args},
+		"params": map[string]any{
+			"name":      name,
+			"arguments": args,
+			"_meta": map[string]any{
+				"io.modelcontextprotocol/protocolVersion":    mcpProtocolVersion,
+				"io.modelcontextprotocol/clientInfo":         map[string]any{"name": "mnemonic-integration-tests", "version": "0"},
+				"io.modelcontextprotocol/clientCapabilities": map[string]any{},
+			},
+		},
+	}, map[string]string{
+		"MCP-Protocol-Version": mcpProtocolVersion,
+		"Mcp-Method":           "tools/call",
+		"Mcp-Name":             name,
 	})
 	if status != http.StatusOK {
 		t.Fatalf("MCP %s: status %d\nbody: %s", name, status, data)

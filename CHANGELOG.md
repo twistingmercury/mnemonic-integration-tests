@@ -18,6 +18,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- MCP tool calls are sent as MCP protocol version 2026-07-28 requests: the
+  protocol version, client info and capabilities in `_meta`, with the
+  `MCP-Protocol-Version`, `Mcp-Method` and `Mcp-Name` headers.
 - The suite now covers only paths that span services. Tests that repeated a
   single service's own E2E coverage (API CRUD, MCP tool validation, per-service
   version checks) are removed; health is one table-driven test that checks
